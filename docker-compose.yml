@@ -205,27 +205,7 @@ services:
         limits:
           memory: 30M
 
-  # ============================================================================
-  # 10. Production Workload: Football Manager Telegram Bot
-  # ============================================================================
-  football-manager:
-    image: yeronymus/football-manager:latest
-    container_name: football-manager
-    restart: unless-stopped
-    environment:
-      - BOT_TOKEN=${BOT_TOKEN}
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
-      - ADMIN_CHAT_ID=${BOT_ADMIN_CHAT_ID}
-      - PORT=8080
-    volumes:
-      - ${DATA_DIR:-/opt/homelab/data}/football-manager:/app/data
-    networks:
-      - homelab-net
-    deploy:
-      resources:
-        limits:
-          memory: 200M
-
 networks:
   homelab-net:
     driver: bridge
+

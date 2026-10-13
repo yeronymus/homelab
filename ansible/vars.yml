@@ -30,10 +30,5 @@ vaultwarden_signups_allowed: "false"
 grafana_admin_user: "admin"
 grafana_admin_password: "ChangeThisGrafanaPassword123!"
 
-# Telegram Football Manager bot
-bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-webhook_secret: "generate_random_webhook_secret_here"
-bot_admin_chat_id: "your_chat_id"
-
 # Monitoring
 dead_mans_snitch_url: "https://nosnch.in/YOUR_TOKEN_HERE"

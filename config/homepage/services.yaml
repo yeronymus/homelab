@@ -43,13 +43,6 @@
         container: prometheus
 
 - Applications:
-    - Football Manager Bot:
-        icon: telegram.png
-        href: https://t.me/
-        description: Telegram Production Bot Daemon
-        server: my-docker
-        container: football-manager
-
     - Tailscale:
         icon: tailscale.png
         href: https://login.tailscale.com/admin/machines

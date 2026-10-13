@@ -67,6 +67,8 @@
         path: /etc/systemd/resolved.conf
         regexp: '^#?DNSStubListener='
         line: 'DNSStubListener=no'
+        create: yes
+      failed_when: false
       notify: Restart systemd-resolved
 
     # ==========================================================================
@@ -124,7 +126,6 @@
         - "prometheus"
         - "grafana"
         - "portainer"
-        - "football-manager"
 
     - name: Create backups directory
       ansible.builtin.file:
@@ -265,7 +266,7 @@
         repo: "{{ homelab_git_repo }}"
         dest: "{{ homelab_install_dir }}"
         version: main
-        force: no
+        force: yes
 
     - name: Generate placeholder SSL certificate if needed
       ansible.builtin.command:
