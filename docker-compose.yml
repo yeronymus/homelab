@@ -34,6 +34,7 @@ services:
     restart: unless-stopped
     environment:
       - TZ=${TZ:-UTC}
+      - HOMEPAGE_ALLOWED_HOSTS=*
     volumes:
       - ./config/homepage:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
