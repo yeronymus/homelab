@@ -1,0 +1,15 @@
+title: "Homelab Dashboard"
+favicon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/homelab.png
+theme: dark
+color: slate
+cardBlur: sm
+layout:
+  Core Services:
+    style: row
+    columns: 2
+  Observability:
+    style: row
+    columns: 2
+  Applications:
+    style: row
+    columns: 2

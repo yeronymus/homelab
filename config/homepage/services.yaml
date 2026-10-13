@@ -1,0 +1,56 @@
+- Core Services:
+    - Vaultwarden:
+        icon: vaultwarden.png
+        href: /vault/
+        description: Encrypted Secret & Password Management
+        server: my-docker
+        container: vaultwarden
+
+    - Pi-hole:
+        icon: pi-hole.png
+        href: /admin/
+        description: Network-wide DNS & Ad Blocking
+        server: my-docker
+        container: pihole
+
+    - Portainer:
+        icon: portainer.png
+        href: /portainer/
+        description: Docker Environment Management
+        server: my-docker
+        container: portainer
+
+- Observability:
+    - Uptime Kuma:
+        icon: uptime-kuma.png
+        href: /kuma/
+        description: Endpoint Health Checks & Alerts
+        server: my-docker
+        container: uptime-kuma
+
+    - Grafana:
+        icon: grafana.png
+        href: /grafana/
+        description: System & Workload Visual Dashboards
+        server: my-docker
+        container: grafana
+
+    - Prometheus:
+        icon: prometheus.png
+        href: http://localhost:9090
+        description: Metric Scraper & Time-Series DB
+        server: my-docker
+        container: prometheus
+
+- Applications:
+    - Football Manager Bot:
+        icon: telegram.png
+        href: https://t.me/
+        description: Telegram Production Bot Daemon
+        server: my-docker
+        container: football-manager
+
+    - Tailscale:
+        icon: tailscale.png
+        href: https://login.tailscale.com/admin/machines
+        description: Encrypted Zero-Trust WireGuard Mesh

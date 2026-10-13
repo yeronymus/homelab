@@ -1,0 +1,10 @@
+- resources:
+    cpu: true
+    memory: true
+    uptime: true
+    disk: /
+    units: metric
+
+- search:
+    provider: duckduckgo
+    target: _blank

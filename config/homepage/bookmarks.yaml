@@ -1,0 +1,13 @@
+- Homelab Shortcuts:
+    - GitHub Repository:
+        - icon: github.png
+          href: https://github.com/yeronymus/homelab
+    - Football Manager Bot Repo:
+        - icon: github.png
+          href: https://github.com/yeronymus/football-manager
+    - Tailscale Admin Console:
+        - icon: tailscale.png
+          href: https://login.tailscale.com/admin/machines
+    - DuckDNS Account:
+        - icon: duckdns.png
+          href: https://www.duckdns.org/

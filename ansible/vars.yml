@@ -1,0 +1,37 @@
+# ==============================================================================
+# Homelab Ansible Variables
+# ==============================================================================
+
+# User configuration
+target_user: "yeronym"
+homelab_install_dir: "/opt/homelab"
+homelab_git_repo: "https://github.com/yeronymus/homelab.git"
+
+# Storage configuration
+storage_mount_point: "/mnt/hdd"
+use_sparse_disk: true
+virtual_disk_size: "1000G"
+virtual_disk_path: "/var/lib/homelab/virtual-hdd.img"
+
+# System settings
+system_timezone: "Europe/Kyiv"
+
+# Networking & Ingress
+duckdns_domain: "your-subdomain"
+duckdns_token: "your-duckdns-token"
+domain_name: "your-subdomain.duckdns.org"
+
+# Passwords and secrets
+pihole_password: "ChangeThisSecretPassword123!"
+vaultwarden_admin_token: "ChangeThisVaultwardenAdminToken123!"
+vaultwarden_signups_allowed: "false"
+grafana_admin_user: "admin"
+grafana_admin_password: "ChangeThisGrafanaPassword123!"
+
+# Telegram Football Manager bot
+bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+webhook_secret: "generate_random_webhook_secret_here"
+bot_admin_chat_id: "your_chat_id"
+
+# Monitoring
+dead_mans_snitch_url: "https://nosnch.in/YOUR_TOKEN_HERE"

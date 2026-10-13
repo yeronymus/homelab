@@ -1,0 +1,24 @@
+# Environment files with sensitive credentials
+.env
+.env.local
+
+# SSL certificates and private keys
+ssl/live/*
+!ssl/live/.gitkeep
+
+# ACME Challenge data
+certbot/
+certbot/www/
+
+# Local data volumes
+data/
+backups/
+*.tar.gz
+*.img
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db

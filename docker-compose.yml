@@ -1,0 +1,231 @@
+services:
+  # ============================================================================
+  # 1. Edge Ingress & Reverse Proxy
+  # ============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: homelab-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./certbot/www:/var/www/certbot:ro
+    networks:
+      - homelab-net
+    depends_on:
+      - homepage
+      - vaultwarden
+      - pihole
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  # ============================================================================
+  # 2. Main Homelab Dashboard (Homepage)
+  # ============================================================================
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./config/homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+
+  # ============================================================================
+  # 3. DNS Sinkhole & Local Domains (Pi-hole)
+  # ============================================================================
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+    environment:
+      - TZ=${TZ:-UTC}
+      - WEBPASSWORD=${PIHOLE_PASSWORD}
+      - FTLCONF_LOCAL_IPV4=${TAILSCALE_IP:-127.0.0.1}
+    volumes:
+      - ${DATA_DIR:-/mnt/hdd/data}/pihole/etc-pihole:/etc/pihole
+      - ${DATA_DIR:-/mnt/hdd/data}/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+    networks:
+      - homelab-net
+    cap_add:
+      - NET_ADMIN
+    deploy:
+      resources:
+        limits:
+          memory: 250M
+
+  # ============================================================================
+  # 4. Password Manager (Vaultwarden)
+  # ============================================================================
+  vaultwarden:
+    image: vaultwarden/server:alpine
+    container_name: vaultwarden
+    restart: unless-stopped
+    environment:
+      - DOMAIN=https://${DOMAIN_NAME}/vault
+      - SIGNUPS_ALLOWED=${VAULTWARDEN_SIGNUPS_ALLOWED:-false}
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+      - WEBSOCKET_ENABLED=true
+    volumes:
+      - ${DATA_DIR:-/mnt/hdd/data}/vaultwarden:/data
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+
+  # ============================================================================
+  # 5. Container Management UI (Portainer CE)
+  # ============================================================================
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DATA_DIR:-/mnt/hdd/data}/portainer:/data
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+
+  # ============================================================================
+  # 6. Service Heartbeats & Status Monitor (Uptime Kuma)
+  # ============================================================================
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    volumes:
+      - ${DATA_DIR:-/mnt/hdd/data}/uptime-kuma:/app/data
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+
+  # ============================================================================
+  # 7. Metrics & Telemetry (Prometheus & Node Exporter)
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${DATA_DIR:-/mnt/hdd/data}/prometheus:/prometheus
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 350M
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+
+  # ============================================================================
+  # 8. Visualization Dashboards (Grafana)
+  # ============================================================================
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://${DOMAIN_NAME}/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - ${DATA_DIR:-/mnt/hdd/data}/grafana:/var/lib/grafana
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 250M
+
+  # ============================================================================
+  # 9. Dynamic DNS Sync (DuckDNS)
+  # ============================================================================
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:latest
+    container_name: duckdns
+    restart: unless-stopped
+    environment:
+      - SUBDOMAINS=${DUCKDNS_DOMAIN}
+      - TOKEN=${DUCKDNS_TOKEN}
+      - TZ=${TZ:-UTC}
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 30M
+
+  # ============================================================================
+  # 10. Production Workload: Football Manager Telegram Bot
+  # ============================================================================
+  football-manager:
+    image: yeronymus/football-manager:latest
+    container_name: football-manager
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - ADMIN_CHAT_ID=${BOT_ADMIN_CHAT_ID}
+      - PORT=8080
+    volumes:
+      - ${DATA_DIR:-/mnt/hdd/data}/football-manager:/app/data
+    networks:
+      - homelab-net
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+
+networks:
+  homelab-net:
+    driver: bridge

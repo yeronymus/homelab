@@ -1,0 +1,316 @@
+---
+- name: Deploy and Configure Homelab Server
+  hosts: homelab
+  become: true
+  vars_files:
+    - vars.yml
+
+  tasks:
+    # ==========================================================================
+    # 1. System Base & Dependencies
+    # ==========================================================================
+    - name: Set system timezone
+      community.general.timezone:
+        name: "{{ system_timezone }}"
+
+    - name: Update apt cache and upgrade packages
+      ansible.builtin.apt:
+        update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Install essential utility packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - git
+          - htop
+          - iotop
+          - ufw
+          - fail2ban
+          - tlp
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - rsync
+          - tar
+          - sqlite3
+          - e2fsprogs
+        state: present
+
+    # ==========================================================================
+    # 2. Laptop Power Policy & Battery Management
+    # ==========================================================================
+    - name: Configure systemd-logind to ignore laptop lid switch
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/logind.conf
+        regexp: "^#?{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: 'HandleLidSwitch', value: 'ignore' }
+        - { key: 'HandleLidSwitchDocked', value: 'ignore' }
+        - { key: 'HandleLidSwitchExternalPower', value: 'ignore' }
+      notify: Restart systemd-logind
+
+    - name: Enable and start TLP service
+      ansible.builtin.systemd:
+        name: tlp
+        enabled: yes
+        state: started
+
+    # ==========================================================================
+    # 3. DNS Conflict Resolution (Free port 53 for Pi-hole)
+    # ==========================================================================
+    - name: Disable systemd-resolved DNSStubListener
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: '^#?DNSStubListener='
+        line: 'DNSStubListener=no'
+      notify: Restart systemd-resolved
+
+    # ==========================================================================
+    # 4. Storage Provisioning (Virtual Sparse 1TB HDD / Physical Mount)
+    # ==========================================================================
+    - name: Ensure parent directory for virtual image exists
+      ansible.builtin.file:
+        path: "{{ virtual_disk_path | dirname }}"
+        state: directory
+        mode: '0755'
+
+    - name: Check if virtual disk image exists
+      ansible.builtin.stat:
+        path: "{{ virtual_disk_path }}"
+      register: virtual_img_stat
+      when: use_sparse_disk
+
+    - name: Create sparse image file (consumes 0 actual bytes initially)
+      ansible.builtin.command:
+        cmd: "truncate -s {{ virtual_disk_size }} {{ virtual_disk_path }}"
+      when: use_sparse_disk and not virtual_img_stat.stat.exists
+
+    - name: Format sparse image with ext4 filesystem
+      ansible.builtin.filesystem:
+        fstype: ext4
+        dev: "{{ virtual_disk_path }}"
+        opts: "-q -m 1 -L homelab-data"
+      when: use_sparse_disk and not virtual_img_stat.stat.exists
+
+    - name: Ensure storage mount point directory exists
+      ansible.builtin.file:
+        path: "{{ storage_mount_point }}"
+        state: directory
+        mode: '0755'
+
+    - name: Mount virtual sparse disk via loop in /etc/fstab
+      ansible.posix.mount:
+        path: "{{ storage_mount_point }}"
+        src: "{{ virtual_disk_path }}"
+        fstype: ext4
+        opts: "loop,discard,defaults,nofail"
+        state: mounted
+      when: use_sparse_disk
+
+    - name: Create persistent service data directories
+      ansible.builtin.file:
+        path: "{{ storage_mount_point }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "data"
+        - "data/vaultwarden"
+        - "data/pihole/etc-pihole"
+        - "data/pihole/etc-dnsmasq.d"
+        - "data/uptime-kuma"
+        - "data/prometheus"
+        - "data/grafana"
+        - "data/portainer"
+        - "data/football-manager"
+        - "backups"
+
+    - name: Adjust permissions for Prometheus and Grafana container volumes
+      ansible.builtin.file:
+        path: "{{ storage_mount_point }}/data/{{ item }}"
+        mode: '0777'
+      loop:
+        - "prometheus"
+        - "grafana"
+
+    # ==========================================================================
+    # 5. Docker Engine & Compose Plugin Installation
+    # ==========================================================================
+    - name: Create directory for Docker apt keyrings
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker official GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Add Docker official apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker CE and Compose plugin
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Add target user to docker group
+      ansible.builtin.user:
+        name: "{{ target_user }}"
+        groups: docker
+        append: yes
+
+    - name: Ensure Docker service is running and enabled
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    # ==========================================================================
+    # 6. Tailscale Mesh VPN Installation
+    # ==========================================================================
+    - name: Download Tailscale official GPG key
+      ansible.builtin.get_url:
+        url: https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.noarmor.gpg
+        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        mode: '0644'
+
+    - name: Add Tailscale official repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian {{ ansible_distribution_release }} main"
+        state: present
+        filename: tailscale
+
+    - name: Install Tailscale package
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: yes
+
+    - name: Ensure tailscaled daemon is enabled and running
+      ansible.builtin.systemd:
+        name: tailscaled
+        state: started
+        enabled: yes
+
+    # ==========================================================================
+    # 7. Firewall (UFW) Hardening
+    # ==========================================================================
+    - name: Set UFW default incoming policy to deny
+      community.general.ufw:
+        direction: incoming
+        policy: deny
+
+    - name: Set UFW default outgoing policy to allow
+      community.general.ufw:
+        direction: outgoing
+        policy: allow
+
+    - name: Allow SSH port through UFW
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Allow HTTP and HTTPS (ports 80 and 443)
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '80'
+        - '443'
+
+    - name: Allow all traffic on Tailscale mesh interface (tailscale0)
+      community.general.ufw:
+        rule: allow
+        interface: tailscale0
+        direction: in
+
+    - name: Enable UFW firewall
+      community.general.ufw:
+        state: enabled
+
+    # ==========================================================================
+    # 8. Deploy Homelab Stack
+    # ==========================================================================
+    - name: Ensure homelab directory exists
+      ansible.builtin.file:
+        path: "{{ homelab_install_dir }}"
+        state: directory
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: '0755'
+
+    - name: Clone or pull homelab repository
+      ansible.builtin.git:
+        repo: "{{ homelab_git_repo }}"
+        dest: "{{ homelab_install_dir }}"
+        version: main
+        force: no
+
+    - name: Generate placeholder SSL certificate if needed
+      ansible.builtin.command:
+        cmd: "bash scripts/generate-self-signed-ssl.sh"
+        chdir: "{{ homelab_install_dir }}"
+        creates: "{{ homelab_install_dir }}/ssl/live/fullchain.pem"
+
+    - name: Deploy .env configuration file
+      ansible.builtin.template:
+        src: "{{ homelab_install_dir }}/.env.example"
+        dest: "{{ homelab_install_dir }}/.env"
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: '0600'
+        force: no
+
+    # ==========================================================================
+    # 9. Scheduled Maintenance (Cron Jobs)
+    # ==========================================================================
+    - name: Set up daily volume backup cron job at 04:00
+      ansible.builtin.cron:
+        name: "Homelab daily volume backup"
+        minute: "0"
+        hour: "4"
+        job: "bash {{ homelab_install_dir }}/scripts/backup-volumes.sh > /var/log/homelab-backup.log 2>&1"
+        user: root
+
+    - name: Set up Dead Man's Snitch uptime heartbeat ping
+      ansible.builtin.cron:
+        name: "Dead Mans Snitch ping"
+        minute: "*/5"
+        job: "curl -fsS --retry 3 {{ dead_mans_snitch_url }} >/dev/null 2>&1"
+        user: root
+
+    # ==========================================================================
+    # 10. Start Docker Compose Stack
+    # ==========================================================================
+    - name: Start homelab Docker Compose stack
+      ansible.builtin.command:
+        cmd: "docker compose up -d"
+        chdir: "{{ homelab_install_dir }}"
+
+  handlers:
+    - name: Restart systemd-logind
+      ansible.builtin.systemd:
+        name: systemd-logind
+        state: restarted
+
+    - name: Restart systemd-resolved
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: restarted

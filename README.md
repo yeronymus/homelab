@@ -24,6 +24,9 @@ A compact, single-node production homelab built on repurposed laptop hardware. D
 6. [Workload: Football Manager Bot](#6-workload-football-manager-bot)
 7. [Observability & Alert Pipeline](#7-observability--alert-pipeline)
 8. [Maintenance & Automation Scripts](#8-maintenance--automation-scripts)
+9. [Dashboard: Homepage](#9-dashboard-homepage)
+10. [Storage Architecture & Virtual 1TB HDD Emulation](#10-storage-architecture--virtual-1tb-hdd-emulation)
+11. [Automated Provisioning via Ansible](#11-automated-provisioning-via-ansible)
 
 ## 1. Hardware Specifications
 
@@ -96,6 +99,7 @@ The system was deployed on bare-metal **Debian 12 (Bookworm) Minimal**:
 | **Grafana** | `grafana/grafana-oss` | ~220 MB | Tailscale / LAN | Telemetry visual dashboards |
 | **Prometheus** | `prom/prometheus` | ~300 MB | Internal Docker net | Metric collection & time-series storage |
 | **Node Exporter** | `prom/node-exporter` | ~20 MB | Internal Docker net | Host hardware and OS telemetry exporter |
+| **Homepage** | `ghcr.io/gethomepage/homepage` | ~30 MB | Tailscale / LAN | Unified modern startpage & homelab monitoring dashboard |
 | **Portainer CE** | `portainer/portainer-ce` | ~80 MB | Tailscale / LAN | Docker container management UI |
 
 ## 5. Core Self-Hosted Services
@@ -151,3 +155,39 @@ HandleLidSwitchDocked=ignore
 # /etc/cron.daily/homelab-backup
 0 4 * * * root /opt/scripts/backup-volumes.sh
 ```
+
+## 9. Dashboard: Homepage
+
+A unified, modern, lightweight dashboard deployed via [Homepage](https://gethomepage.dev) connects to the Docker socket to provide real-time status widgets:
+* **System Metrics:** Real-time host CPU, RAM, temperature, uptime, and disk capacity.
+* **Service Integrations:** Visual indicators for Pi-hole, Uptime Kuma, Vaultwarden, Portainer, and Grafana.
+* **Security:** Bound strictly to Tailscale / LAN ingress via Nginx reverse proxy.
+
+## 10. Storage Architecture & Virtual 1TB HDD Emulation
+
+If the physical 1 TB secondary HDD is not yet installed, the infrastructure provisions a **sparse loop device image**:
+* A 1 TB sparse file is created on the primary SSD (`/var/lib/homelab/virtual-hdd.img`).
+* **Zero initial storage consumption:** A sparse file only consumes physical storage when actual container data is written to it.
+* Automatically formatted as `ext4` and mounted to `/mnt/hdd` in `/etc/fstab` with `discard` enabled.
+* **Seamless Hardware Migration:** When the physical 1 TB drive is plugged in later, simply `rsync` contents from `/mnt/hdd/` to the physical partition and update `/etc/fstab`. Zero modifications to `docker-compose.yml` or container volume paths are required!
+
+Provisioning script:
+```bash
+sudo bash scripts/setup-sparse-disk.sh
+```
+
+## 11. Automated Provisioning via Ansible
+
+Complete bare-metal-to-production automation is available in the [`ansible/`](file:///ansible/) directory:
+
+```bash
+# From target Debian 12 machine:
+sudo apt update && sudo apt install -y git ansible
+git clone https://github.com/yeronymus/homelab.git
+cd homelab/ansible
+# Configure passwords, domain, and tokens:
+nano vars.yml
+# Execute playbook:
+sudo ansible-playbook -i inventory.ini playbook.yml
+```
+
