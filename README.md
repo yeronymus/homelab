@@ -12,7 +12,7 @@ A compact, single-node production homelab built on repurposed laptop hardware. D
 * **Self-Hosted Productivity:** **Vaultwarden** (lightweight Bitwarden implementation) for encrypted personal secret and password management.
 * **Remote Management:** **Tailscale (WireGuard Mesh)** deployed for encrypted administrative access (SSH, Homepage, Grafana, Portainer, Vaultwarden, Pi-hole) from authorized personal devices without exposing management ports to the internet.
 * **Dashboard:** **Homepage** deployed as a unified, modern dashboard with live Docker container metrics, host CPU/RAM/disk widgets, and direct service shortcuts.
-* **Core Workload:** Self-hosted production environment running the [`football-manager`](https://github.com/yeronymus/football-manager) Telegram bot daemon.
+* **Extensibility:** Support for custom user applications and bots attached cleanly via Docker network.
 * **Observability:** Prometheus + Grafana telemetry stack, local Uptime Kuma for service heartbeats, and an external Dead Man's Snitch ping for power and upstream connection outages.
 * **Provisioning & Orchestration:** Fully automated via **Ansible** and **Docker Compose**.
 
@@ -26,7 +26,7 @@ A compact, single-node production homelab built on repurposed laptop hardware. D
 4. [Service Catalog](#4-service-catalog)
 5. [Dashboard: Homepage](#5-dashboard-homepage)
 6. [Core Self-Hosted Services](#6-core-self-hosted-services)
-7. [Workload: Football Manager Bot](#7-workload-football-manager-bot)
+7. [Deploying Custom Applications & Bots](#7-deploying-custom-applications--bots)
 8. [Observability & Alert Pipeline](#8-observability--alert-pipeline)
 9. [Automated Deployment via Ansible](#9-automated-deployment-via-ansible)
 10. [Manual Deployment via Docker Compose](#10-manual-deployment-via-docker-compose)
@@ -88,10 +88,10 @@ Because resource-heavy storage consumers (such as Immich photo galleries, Nextcl
             (Public Path)                 (WAN Blocked)                    |
                   |                             |                          |
                   v                             v                          v
-    [ /webhook/football-manager ]       [ 403 Forbidden ] ---> [ Secure Tailscale Access ]
+       [ /webhook/<your-app> ]          [ 403 Forbidden ] ---> [ Secure Tailscale Access ]
                   |                                           - Homepage (Dashboard)
                   v                                           - Vaultwarden (Passwords)
-    [ football-manager Container ]                            - Pi-hole (DNS / Blocklist)
+       [ Your Container / Bot ]                               - Pi-hole (DNS / Blocklist)
                                                               - Grafana / Kuma / Portainer
                                                               - Host SSH (Port 22)
 ```
@@ -109,7 +109,7 @@ To confirm your connection has a real public (white) IP rather than being trappe
 ### Ingress & Security Model
 * **DuckDNS Dynamic Sync:** Queries the DuckDNS API every 5 minutes to keep public DNS records aligned with the dynamic WAN IP.
 * **Nginx Reverse Proxy:** Terminating TLS with automated Let's Encrypt certificates.
-* **Public Boundary:** Strictly scoped to `/webhook/football-manager`. Rate limiting is enforced (`15r/s` burst `20`) to shield the bot from malicious traffic.
+* **Public Boundary:** Strictly scoped to explicit webhook paths. Rate limiting is enforced (`15r/s` burst `20`) to shield downstream apps from malicious traffic.
 * **Private Boundary (Tailscale):** Management dashboards (Homepage, Portainer, Pi-hole, Uptime Kuma, Grafana) and Vaultwarden are protected by Nginx access control rules:
   ```nginx
   allow 100.64.0.0/10;   # Tailscale mesh
@@ -134,9 +134,8 @@ To confirm your connection has a real public (white) IP rather than being trappe
 | **Node Exporter** | `prom/node-exporter` | ~50 MB | Internal Docker net | Host hardware, CPU, RAM, and disk metrics exporter |
 | **Portainer CE** | `portainer/portainer-ce` | ~100 MB | Tailscale / LAN | Docker container management UI |
 | **DuckDNS Sync** | `linuxserver/duckdns` | ~30 MB | Outbound only | Dynamic DNS synchronization daemon |
-| **Football Manager** | Custom build | ~200 MB | Internal container | Telegram bot production daemon ([Source](https://github.com/yeronymus/football-manager)) |
 
-*Total container memory limits capped at ~1.7 GB, leaving >5 GB of free RAM for Linux page caching, kernel buffers, and host operations.*
+*Total core container memory limits capped at ~1.5 GB, leaving >6 GB of free RAM for user workloads, Linux page caching, kernel buffers, and host operations.*
 
 ---
 
@@ -167,12 +166,32 @@ To confirm your connection has a real public (white) IP rather than being trappe
 
 ---
 
-## 7. Workload: Football Manager Bot
+## 7. Deploying Custom Applications & Bots
 
-The homelab serves as the production runtime for the [`football-manager`](https://github.com/yeronymus/football-manager) Telegram bot:
-* **Webhook Architecture:** Incoming Telegram updates delivered via HTTPS webhooks instead of long-polling.
-* **Nginx Gateway:** Protected by token validation and rate limiting.
-* **Data Storage:** SQLite database and bot logs stored at `/opt/homelab/data/football-manager`.
+The homelab is designed as a clean, decoupled platform. Any personal bots, tools, or web services (e.g., Telegram bots, scripts, APIs) run independently from their own repositories without cluttering the core homelab stack.
+
+### How to Attach a Custom Service
+To connect an external service or bot to the homelab network, attach it to the `homelab-net` Docker network in its own `docker-compose.yml`:
+
+```yaml
+# In your bot's personal docker-compose.yml:
+services:
+  my-bot:
+    build: .
+    container_name: my-bot
+    restart: unless-stopped
+    networks:
+      - homelab-net
+    environment:
+      - BOT_TOKEN=your_token
+
+networks:
+  homelab-net:
+    external: true
+```
+
+* **Access via Nginx:** If your application needs external webhooks or public ingress, add a location block in `config/nginx/conf.d/` pointing to `http://my-bot:<port>`.
+* **Add to Homepage:** Add a card into [`config/homepage/services.yaml`](file:///config/homepage/services.yaml) to show real-time CPU/RAM stats on your dashboard.
 
 ---
 

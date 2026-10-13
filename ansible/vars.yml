@@ -2,8 +2,8 @@
 # Homelab Ansible Variables
 # ==============================================================================
 
-# User configuration
-target_user: "yeronym"
+# User configuration (automatically detects the non-root user who ran sudo)
+target_user: "{{ ansible_env.SUDO_USER | default(ansible_user_id) }}"
 homelab_install_dir: "/opt/homelab"
 homelab_git_repo: "https://github.com/yeronymus/homelab.git"
 

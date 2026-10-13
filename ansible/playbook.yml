@@ -60,89 +60,23 @@
         state: started
 
     # ==========================================================================
-    # 3. DNS Conflict Resolution (Free port 53 for Pi-hole)
+    # 3. DNS Conflict Resolution (Free port 53 for Pi-hole if resolved is present)
     # ==========================================================================
-    - name: Disable systemd-resolved DNSStubListener
+    - name: Check if systemd-resolved configuration exists
+      ansible.builtin.stat:
+        path: /etc/systemd/resolved.conf
+      register: resolved_conf_stat
+
+    - name: Disable systemd-resolved DNSStubListener if resolved is present
       ansible.builtin.lineinfile:
         path: /etc/systemd/resolved.conf
         regexp: '^#?DNSStubListener='
         line: 'DNSStubListener=no'
-        create: yes
-      failed_when: false
+      when: resolved_conf_stat.stat.exists
       notify: Restart systemd-resolved
 
     # ==========================================================================
-    # 4. Storage Provisioning (Virtual Sparse 1TB HDD / Physical Mount)
-    # ==========================================================================
-    - name: Ensure parent directory for virtual image exists
-      ansible.builtin.file:
-        path: "{{ virtual_disk_path | dirname }}"
-        state: directory
-        mode: '0755'
-
-    - name: Check if virtual disk image exists
-      ansible.builtin.stat:
-        path: "{{ virtual_disk_path }}"
-      register: virtual_img_stat
-      when: use_sparse_disk
-
-    - name: Create sparse image file (consumes 0 actual bytes initially)
-      ansible.builtin.command:
-        cmd: "truncate -s {{ virtual_disk_size }} {{ virtual_disk_path }}"
-      when: use_sparse_disk and not virtual_img_stat.stat.exists
-
-    - name: Format sparse image with ext4 filesystem
-      ansible.builtin.filesystem:
-        fstype: ext4
-        dev: "{{ virtual_disk_path }}"
-        opts: "-q -m 1 -L homelab-data"
-      when: use_sparse_disk and not virtual_img_stat.stat.exists
-
-    - name: Ensure storage mount point directory exists
-      ansible.builtin.file:
-        path: "{{ storage_mount_point }}"
-        state: directory
-        mode: '0755'
-
-    - name: Mount virtual sparse disk via loop in /etc/fstab
-      ansible.posix.mount:
-        path: "{{ storage_mount_point }}"
-        src: "{{ virtual_disk_path }}"
-        fstype: ext4
-        opts: "loop,discard,defaults,nofail"
-        state: mounted
-      when: use_sparse_disk
-
-    - name: Create persistent service data directories on SSD
-      ansible.builtin.file:
-        path: "{{ storage_data_dir }}/{{ item }}"
-        state: directory
-        mode: '0755'
-      loop:
-        - "vaultwarden"
-        - "pihole/etc-pihole"
-        - "pihole/etc-dnsmasq.d"
-        - "uptime-kuma"
-        - "prometheus"
-        - "grafana"
-        - "portainer"
-
-    - name: Create backups directory
-      ansible.builtin.file:
-        path: "{{ backup_dir }}"
-        state: directory
-        mode: '0755'
-
-    - name: Adjust permissions for Prometheus and Grafana container volumes
-      ansible.builtin.file:
-        path: "{{ storage_data_dir }}/{{ item }}"
-        mode: '0777'
-      loop:
-        - "prometheus"
-        - "grafana"
-
-    # ==========================================================================
-    # 5. Docker Engine & Compose Plugin Installation
+    # 4. Docker Engine & Compose Plugin Installation
     # ==========================================================================
     - name: Create directory for Docker apt keyrings
       ansible.builtin.file:
@@ -186,7 +120,7 @@
         enabled: yes
 
     # ==========================================================================
-    # 6. Tailscale Mesh VPN Installation
+    # 5. Tailscale Mesh VPN Installation
     # ==========================================================================
     - name: Download Tailscale official GPG key
       ansible.builtin.get_url:
@@ -213,7 +147,7 @@
         enabled: yes
 
     # ==========================================================================
-    # 7. Firewall (UFW) Hardening
+    # 6. Firewall (UFW) Hardening
     # ==========================================================================
     - name: Set UFW default incoming policy to deny
       community.general.ufw:
@@ -251,16 +185,8 @@
         state: enabled
 
     # ==========================================================================
-    # 8. Deploy Homelab Stack
+    # 7. Deploy Homelab Repository
     # ==========================================================================
-    - name: Ensure homelab directory exists
-      ansible.builtin.file:
-        path: "{{ homelab_install_dir }}"
-        state: directory
-        owner: "{{ target_user }}"
-        group: "{{ target_user }}"
-        mode: '0755'
-
     - name: Clone or pull homelab repository
       ansible.builtin.git:
         repo: "{{ homelab_git_repo }}"
@@ -268,6 +194,51 @@
         version: main
         force: yes
 
+    - name: Ensure homelab directory ownership
+      ansible.builtin.file:
+        path: "{{ homelab_install_dir }}"
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        recurse: no
+
+    # ==========================================================================
+    # 8. Storage & Persistent Volumes Provisioning
+    # ==========================================================================
+    - name: Create persistent service data directories on SSD
+      ansible.builtin.file:
+        path: "{{ storage_data_dir }}/{{ item }}"
+        state: directory
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: '0755'
+      loop:
+        - "vaultwarden"
+        - "pihole/etc-pihole"
+        - "pihole/etc-dnsmasq.d"
+        - "uptime-kuma"
+        - "prometheus"
+        - "grafana"
+        - "portainer"
+
+    - name: Create backups directory
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: '0755'
+
+    - name: Adjust permissions for Prometheus and Grafana container volumes
+      ansible.builtin.file:
+        path: "{{ storage_data_dir }}/{{ item }}"
+        mode: '0777'
+      loop:
+        - "prometheus"
+        - "grafana"
+
+    # ==========================================================================
+    # 9. Configuration & SSL Bootstrap
+    # ==========================================================================
     - name: Generate placeholder SSL certificate if needed
       ansible.builtin.command:
         cmd: "bash scripts/generate-self-signed-ssl.sh"
@@ -284,7 +255,7 @@
         force: no
 
     # ==========================================================================
-    # 9. Scheduled Maintenance (Cron Jobs)
+    # 10. Scheduled Maintenance (Cron Jobs)
     # ==========================================================================
     - name: Set up daily volume backup cron job at 04:00
       ansible.builtin.cron:
@@ -302,7 +273,7 @@
         user: root
 
     # ==========================================================================
-    # 10. Start Docker Compose Stack
+    # 11. Start Docker Compose Stack
     # ==========================================================================
     - name: Start homelab Docker Compose stack
       ansible.builtin.command:
