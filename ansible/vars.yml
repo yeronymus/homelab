@@ -7,11 +7,13 @@ target_user: "yeronym"
 homelab_install_dir: "/opt/homelab"
 homelab_git_repo: "https://github.com/yeronymus/homelab.git"
 
-# Storage configuration
-storage_mount_point: "/mnt/hdd"
-use_sparse_disk: true
+# Storage configuration (SSD mode)
+storage_data_dir: "/opt/homelab/data"
+backup_dir: "/opt/homelab/backups"
+use_sparse_disk: false
 virtual_disk_size: "1000G"
 virtual_disk_path: "/var/lib/homelab/virtual-hdd.img"
+storage_mount_point: "/mnt/hdd"
 
 # System settings
 system_timezone: "Europe/Kyiv"

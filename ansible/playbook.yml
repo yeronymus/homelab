@@ -111,26 +111,30 @@
         state: mounted
       when: use_sparse_disk
 
-    - name: Create persistent service data directories
+    - name: Create persistent service data directories on SSD
       ansible.builtin.file:
-        path: "{{ storage_mount_point }}/{{ item }}"
+        path: "{{ storage_data_dir }}/{{ item }}"
         state: directory
         mode: '0755'
       loop:
-        - "data"
-        - "data/vaultwarden"
-        - "data/pihole/etc-pihole"
-        - "data/pihole/etc-dnsmasq.d"
-        - "data/uptime-kuma"
-        - "data/prometheus"
-        - "data/grafana"
-        - "data/portainer"
-        - "data/football-manager"
-        - "backups"
+        - "vaultwarden"
+        - "pihole/etc-pihole"
+        - "pihole/etc-dnsmasq.d"
+        - "uptime-kuma"
+        - "prometheus"
+        - "grafana"
+        - "portainer"
+        - "football-manager"
+
+    - name: Create backups directory
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
 
     - name: Adjust permissions for Prometheus and Grafana container volumes
       ansible.builtin.file:
-        path: "{{ storage_mount_point }}/data/{{ item }}"
+        path: "{{ storage_data_dir }}/{{ item }}"
         mode: '0777'
       loop:
         - "prometheus"

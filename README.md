@@ -4,68 +4,84 @@ A compact, single-node production homelab built on repurposed laptop hardware. D
 
 ## Quick Summary
 
-* **Hardware:** HP Pavilion 14 (Intel Core i5-8265U 4C/8T, 8 GB RAM, 128 GB SSD + 1 TB HDD).
-* **Base OS:** Debian 12 Minimal.
-* **Ingress & Networking:** Dynamic Public IP synchronized via **DuckDNS**, automated **Let's Encrypt SSL**, and **Nginx Reverse Proxy**. Public ingress is strictly scoped to the bot webhook endpoint.
+* **Hardware:** HP Pavilion 14 (Intel Core i5-8265U 4C/8T, 8 GB RAM, 128 GB SSD).
+* **Storage Policy:** Single-disk SSD deployment (`/opt/homelab/data`). The entire base OS and Docker container stack consume under 15 GB, leaving >100 GB of free SSD storage for fast SQLite databases and operational data without requiring secondary disks.
+* **Base OS:** Debian 12 (Bookworm) Minimal (headless).
+* **Ingress & Networking:** Public (White) IP synchronized via **DuckDNS**, automated **Let's Encrypt TLS**, and **Nginx Reverse Proxy**. Public ingress is strictly scoped to the Telegram bot webhook endpoint.
 * **Network & DNS:** **Pi-hole** deployed as an internal DNS sinkhole for network-wide ad blocking and custom local domain resolution (`*.lab`).
 * **Self-Hosted Productivity:** **Vaultwarden** (lightweight Bitwarden implementation) for encrypted personal secret and password management.
-* **Remote Management:** **Tailscale (WireGuard Mesh)** deployed for encrypted administrative access (SSH, Grafana, Portainer, Vaultwarden, Pi-hole) from authorized personal devices without exposing management ports to the internet.
+* **Remote Management:** **Tailscale (WireGuard Mesh)** deployed for encrypted administrative access (SSH, Homepage, Grafana, Portainer, Vaultwarden, Pi-hole) from authorized personal devices without exposing management ports to the internet.
+* **Dashboard:** **Homepage** deployed as a unified, modern dashboard with live Docker container metrics, host CPU/RAM/disk widgets, and direct service shortcuts.
 * **Core Workload:** Self-hosted production environment running the [`football-manager`](https://github.com/yeronymus/football-manager) Telegram bot daemon.
 * **Observability:** Prometheus + Grafana telemetry stack, local Uptime Kuma for service heartbeats, and an external Dead Man's Snitch ping for power and upstream connection outages.
-* **Orchestration:** Docker Compose with scheduled volume backup automation.
+* **Provisioning & Orchestration:** Fully automated via **Ansible** and **Docker Compose**.
+
+---
 
 ## Table of Contents
 
 1. [Hardware Specifications](#1-hardware-specifications)
-2. [Operating System & Architectural Decisions](#2-operating-system--architectural-decisions)
-3. [Network Topology & Access Control](#3-network-topology--access-control)
+2. [Storage Strategy (SSD Standalone)](#2-storage-strategy-ssd-standalone)
+3. [Network Topology & Public IP Ingress](#3-network-topology--public-ip-ingress)
 4. [Service Catalog](#4-service-catalog)
-5. [Core Self-Hosted Services](#5-core-self-hosted-services)
-6. [Workload: Football Manager Bot](#6-workload-football-manager-bot)
-7. [Observability & Alert Pipeline](#7-observability--alert-pipeline)
-8. [Maintenance & Automation Scripts](#8-maintenance--automation-scripts)
-9. [Dashboard: Homepage](#9-dashboard-homepage)
-10. [Storage Architecture & Virtual 1TB HDD Emulation](#10-storage-architecture--virtual-1tb-hdd-emulation)
-11. [Automated Provisioning via Ansible](#11-automated-provisioning-via-ansible)
+5. [Dashboard: Homepage](#5-dashboard-homepage)
+6. [Core Self-Hosted Services](#6-core-self-hosted-services)
+7. [Workload: Football Manager Bot](#7-workload-football-manager-bot)
+8. [Observability & Alert Pipeline](#8-observability--alert-pipeline)
+9. [Automated Deployment via Ansible](#9-automated-deployment-via-ansible)
+10. [Manual Deployment via Docker Compose](#10-manual-deployment-via-docker-compose)
+11. [Maintenance & Automation Scripts](#11-maintenance--automation-scripts)
+
+---
 
 ## 1. Hardware Specifications
 
 * **Host Machine:** HP Pavilion 14-ce1005ur
 * **CPU:** Intel Core i5-8265U (4 cores / 8 threads, up to 3.90 GHz)
 * **RAM:** 8 GB DDR4-2400 MHz
-* **Storage:** 128 GB M.2 SATA SSD (OS & core configurations) + 1 TB 5400 rpm HDD (persistent Docker volumes, database storage, backup archives)
+* **Storage:** 128 GB M.2 SATA SSD (OS, Docker images, SQLite databases, and application data)
 * **Networking:** Realtek Gigabit Ethernet (RTL8111/8168/8411)
 * **Power & Thermal Policy:**
   * Headless lid behavior managed via `systemd-logind` (`HandleLidSwitch=ignore`).
   * TLP deployed to control charge thresholds and reduce battery thermal wear under constant 24/7 AC power.
+  * Laptop battery serves as an integrated Uninterruptible Power Supply (UPS) against brief power drops.
 
-## 2. Operating System & Architectural Decisions
+---
 
-### Proxmox VE vs. Minimal Linux
+## 2. Storage Strategy (SSD Standalone)
 
-During the early exploratory stage, **Proxmox VE (PVE 8.x)** was evaluated on the node for hypervisor experimentation. However, given the physical 8 GB memory limit, the virtualization overhead and fixed KVM allocations were unnecessary for running lightweight services.
+Currently, the homelab runs **entirely on the 128 GB SSD**. Secondary heavy storage disks (such as a 1 TB HDD) are intentionally omitted for now.
 
-The system was deployed on bare-metal **Debian 12 (Bookworm) Minimal**:
-* Headless deployment with no desktop environment or display manager.
-* Low base footprint, leaving the majority of memory resources for container workloads.
-* Unified service orchestration and process isolation managed via **Docker** and **Docker Compose**.
+### Storage Allocation Breakdown
+* **Debian 12 Minimal OS:** ~3.5 GB
+* **Docker Engine & Images:** ~6.0 GB
+* **Persistent Container Data (`/opt/homelab/data`):** ~1.5 GB
+* **Remaining Available Space:** **>100 GB**
 
-## 3. Network Topology & Access Control
+Because resource-heavy storage consumers (such as Immich photo galleries, Nextcloud, or torrent seeds) are not part of the active stack, 128 GB is more than ample. Running databases (Vaultwarden SQLite, Prometheus TSDB, and Football Manager SQLite) on NVMe/SATA flash storage delivers vastly superior IOPS and near-zero latency compared to mechanical 5400 RPM hard drives.
+
+> [!NOTE]
+> All Docker volumes are mapped to `${DATA_DIR:-/opt/homelab/data}`. When secondary storage (such as a 1 TB HDD) is added in the future, mounting it and migrating the data directory requires modifying only a single line in `.env`.
+
+---
+
+## 3. Network Topology & Public IP Ingress
 
 ```
                  [ Public Internet / Telegram API ]       [ Admin Devices (Phone / Laptop) ]
                                  |                                         |
                          (HTTPS / Port 443)                     (Tailscale WireGuard Mesh)
                                  v                                         v
-               [ Dynamic Public IP (Dormitory WAN) ]          [ Tailscale 100.x.x.x Interface ]
+                      [ Public (White) WAN IP ]               [ Tailscale 100.x.x.x Interface ]
                                  |                                         |
                   +--------------+--------------+                          |
-                  |   DuckDNS Dynamic DNS Sync   |                          |
+                  |   Router Port Forwarding    |                          |
+                  |     (Ports 80, 443 -> Host) |                          |
                   +--------------+--------------+                          |
                                  |                                         |
                                  v                                         |
-                [ Nginx Reverse Proxy (Host: 443) ]                        |
-                 (TLS Termination via Let's Encrypt)                       |
+                 [ Nginx Reverse Proxy (Host: 443) ]                        |
+                  (TLS Termination via Let's Encrypt)                       |
                                  |                                         |
                   +--------------+--------------+                          |
                   |                             |                          |
@@ -73,121 +89,172 @@ The system was deployed on bare-metal **Debian 12 (Bookworm) Minimal**:
                   |                             |                          |
                   v                             v                          v
     [ /webhook/football-manager ]       [ 403 Forbidden ] ---> [ Secure Tailscale Access ]
-                  |                                           - Vaultwarden (Passwords)
-                  v                                           - Pi-hole (DNS / Blocklist)
-    [ football-manager Container ]                            - Grafana / Kuma / Portainer
-                                                              - Host SSH
+                  |                                           - Homepage (Dashboard)
+                  v                                           - Vaultwarden (Passwords)
+    [ football-manager Container ]                            - Pi-hole (DNS / Blocklist)
+                                                              - Grafana / Kuma / Portainer
+                                                              - Host SSH (Port 22)
 ```
 
-* **Dynamic DNS (DuckDNS):** A scheduled cron runner queries the DuckDNS API every 5 minutes to keep public DNS records aligned with the dynamic WAN IP.
-* **Edge Routing & Ingress:** Nginx acts as the perimeter reverse proxy, terminating HTTPS via automated Let's Encrypt certificates provisioned by Certbot.
-* **Dual-Layer Access Model:**
-  * **Public Ingress:** Restricted solely to the `/webhook/...` path required by Telegram Bot API updates.
-  * **Private Administration (Tailscale):** Management dashboards (Grafana, Portainer, Uptime Kuma), Pi-hole web UI, and Vaultwarden are bound to the Tailscale mesh IP (`100.x.x.x`) and local LAN, completely unreachable from the public WAN.
+### Verifying Public (White) IP vs CGNAT
+To confirm your connection has a real public (white) IP rather than being trapped behind ISP Carrier-Grade NAT (CGNAT):
+1. Check the external IP reported by the internet:
+   ```bash
+   curl -4 ifconfig.me
+   ```
+2. Log into your router's admin panel (Status / WAN section) and look at the **WAN IP Address**.
+3. **If the WAN IP matches `curl ifconfig.me`**: You have a real public IP! You can port-forward ports `80` and `443` on your router to the laptop's LAN IP (`192.168.x.x`).
+4. **If the WAN IP falls into CGNAT range (`100.64.0.0` - `100.127.255.255`) or RFC1918 private ranges (`10.x.x.x`, `192.168.x.x`, `172.16-31.x.x`)**: You are behind CGNAT. In that case, use **Cloudflare Tunnel (`cloudflared`)** or **Tailscale Funnel** to bypass the NAT without port forwarding.
+
+### Ingress & Security Model
+* **DuckDNS Dynamic Sync:** Queries the DuckDNS API every 5 minutes to keep public DNS records aligned with the dynamic WAN IP.
+* **Nginx Reverse Proxy:** Terminating TLS with automated Let's Encrypt certificates.
+* **Public Boundary:** Strictly scoped to `/webhook/football-manager`. Rate limiting is enforced (`15r/s` burst `20`) to shield the bot from malicious traffic.
+* **Private Boundary (Tailscale):** Management dashboards (Homepage, Portainer, Pi-hole, Uptime Kuma, Grafana) and Vaultwarden are protected by Nginx access control rules:
+  ```nginx
+  allow 100.64.0.0/10;   # Tailscale mesh
+  allow 192.168.0.0/16;   # Local LAN
+  deny all;               # Untrusted WAN
+  ```
+
+---
 
 ## 4. Service Catalog
 
-| Service | Image | Memory Limit | Access Scope | Purpose |
+| Service | Image | RAM Limit | Access Scope | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
-| **Nginx** | `nginx:alpine` | ~30 MB | Public (:80, :443) | Edge reverse proxy, TLS termination, ingress filtering |
-| **Tailscale** | `tailscale/tailscale` | ~40 MB | Mesh VPN interface | Secure remote administration for SSH and internal services |
-| **Pi-hole** | `pihole/pihole` | ~150 MB | LAN / Tailscale (:53) | Network-wide ad blocking & split-horizon DNS (`*.lab`) |
-| **Vaultwarden** | `vaultwarden/server:alpine` | ~50 MB | Tailscale / LAN | Lightweight self-hosted Bitwarden password manager |
-| **DuckDNS Updater** | Bash cron | ~5 MB | Outbound only | Dynamic DNS synchronization daemon |
-| **Football Manager** | Custom build | ~120 MB | Internal container | Telegram bot production daemon ([Source Code](https://github.com/yeronymus/football-manager)) |
-| **Uptime Kuma** | `louislam/uptime-kuma` | ~180 MB | Tailscale / LAN | Endpoint health checks & Telegram alert dispatch |
-| **Grafana** | `grafana/grafana-oss` | ~220 MB | Tailscale / LAN | Telemetry visual dashboards |
-| **Prometheus** | `prom/prometheus` | ~300 MB | Internal Docker net | Metric collection & time-series storage |
-| **Node Exporter** | `prom/node-exporter` | ~20 MB | Internal Docker net | Host hardware and OS telemetry exporter |
-| **Homepage** | `ghcr.io/gethomepage/homepage` | ~30 MB | Tailscale / LAN | Unified modern startpage & homelab monitoring dashboard |
-| **Portainer CE** | `portainer/portainer-ce` | ~80 MB | Tailscale / LAN | Docker container management UI |
+| **Nginx** | `nginx:alpine` | ~64 MB | Public (:80, :443) | Edge reverse proxy, TLS termination, ingress firewall |
+| **Homepage** | `ghcr.io/gethomepage/homepage` | ~150 MB | Tailscale / LAN | Unified dashboard with system widgets & container telemetry |
+| **Tailscale** | Host systemd / package | ~40 MB | Mesh VPN interface | Secure zero-trust remote administration (SSH & web services) |
+| **Pi-hole** | `pihole/pihole` | ~250 MB | LAN / Tailscale (:53) | Network-wide ad blocking & split-horizon DNS (`*.lab`) |
+| **Vaultwarden** | `vaultwarden/server:alpine` | ~100 MB | Tailscale / LAN | Lightweight self-hosted Bitwarden password manager |
+| **Uptime Kuma** | `louislam/uptime-kuma` | ~200 MB | Tailscale / LAN | Endpoint health checks & Telegram alert dispatch |
+| **Grafana** | `grafana/grafana-oss` | ~250 MB | Tailscale / LAN | Telemetry visual dashboards |
+| **Prometheus** | `prom/prometheus` | ~350 MB | Internal Docker net | Metric collection & time-series database (15-day retention) |
+| **Node Exporter** | `prom/node-exporter` | ~50 MB | Internal Docker net | Host hardware, CPU, RAM, and disk metrics exporter |
+| **Portainer CE** | `portainer/portainer-ce` | ~100 MB | Tailscale / LAN | Docker container management UI |
+| **DuckDNS Sync** | `linuxserver/duckdns` | ~30 MB | Outbound only | Dynamic DNS synchronization daemon |
+| **Football Manager** | Custom build | ~200 MB | Internal container | Telegram bot production daemon ([Source](https://github.com/yeronymus/football-manager)) |
 
-## 5. Core Self-Hosted Services
+*Total container memory limits capped at ~1.7 GB, leaving >5 GB of free RAM for Linux page caching, kernel buffers, and host operations.*
 
-### Vaultwarden (Bitwarden Alternative)
-* **Architecture:** Written in Rust, running via `vaultwarden/server:alpine`, consuming under 50 MB RAM compared to the multi-gigabyte footprint of official upstream Bitwarden.
-* **Security & Access:** Completely isolated from public WAN. Accessible exclusively via Tailscale mesh VPN with internal TLS certificates to satisfy WebCrypto API requirements.
-* **Storage & Backups:** Vaultwarden SQLite database and RSA keyrings are mounted on persistent storage and included in daily automated backup archives.
+---
 
-### Pi-hole (DNS Sinkhole & Local Domains)
-* **Ad-blocking & Privacy:** Serves as the primary upstream DNS server for trusted devices, blocking tracking and telemetry at the DNS level.
-* **Custom Local Records:** Resolves convenient internal domain routes (e.g., `vault.lab`, `kuma.lab`, `grafana.lab`) over the private network.
+## 5. Dashboard: Homepage
 
-## 6. Workload: Football Manager Bot
+[Homepage](https://gethomepage.dev) serves as the centralized launchpad and status monitor:
+* **Docker Integration:** Direct read-only connection to `/var/run/docker.sock` displaying real-time container states, memory, and CPU usage.
+* **System Widgets:** Live host metrics including CPU utilization, core temperatures, memory consumption, and SSD disk capacity.
+* **Categorized Services:**
+  * **Core Services:** Vaultwarden, Pi-hole, Portainer.
+  * **Observability:** Uptime Kuma, Grafana, Prometheus.
+  * **Applications:** Football Manager Bot, Tailscale Admin.
+* **Configuration Directory:** Located in [`config/homepage/`](file:///config/homepage/).
 
-The node serves as the primary production runtime for the [`football-manager`](https://github.com/yeronymus/football-manager) Telegram bot.
+---
 
-* **Webhook Architecture:** Operates using incoming Telegram Webhooks over HTTPS rather than long-polling, avoiding persistent idle connections.
-* **Storage Decoupling:** Persistent database files, logs, and state are mounted from the secondary 1 TB hard drive (`/mnt/hdd/data/football-manager`).
-* **Container Resilience:** Automated container recovery handled via Docker's `restart: unless-stopped` restart policy.
+## 6. Core Self-Hosted Services
 
-## 7. Observability & Alert Pipeline
+### Vaultwarden
+* Written in Rust; memory footprint under 50 MB compared to multi-gigabyte official Bitwarden stack.
+* Isolated from public WAN. Accessible exclusively through Tailscale with HTTPS to satisfy WebCrypto API constraints.
+* Persistent database stored at `/opt/homelab/data/vaultwarden`.
+
+### Pi-hole
+* Primary upstream DNS server for trusted home devices and Tailscale peers (via MagicDNS).
+* Eliminates ads, tracking telemetry, and malware domains at the DNS query level.
+* Resolves custom internal domain routes (e.g. `vault.lab`, `kuma.lab`, `grafana.lab`).
+
+---
+
+## 7. Workload: Football Manager Bot
+
+The homelab serves as the production runtime for the [`football-manager`](https://github.com/yeronymus/football-manager) Telegram bot:
+* **Webhook Architecture:** Incoming Telegram updates delivered via HTTPS webhooks instead of long-polling.
+* **Nginx Gateway:** Protected by token validation and rate limiting.
+* **Data Storage:** SQLite database and bot logs stored at `/opt/homelab/data/football-manager`.
+
+---
+
+## 8. Observability & Alert Pipeline
 
 * **System Telemetry:** Prometheus scrapes host resource data from `node-exporter` every 15 seconds; Grafana visualizes load trends, temperatures, and storage health.
 * **Service Availability:** Uptime Kuma runs continuous HTTP status checks and container heartbeat evaluations.
-* **Incident Dispatch:** Critical failures trigger immediate notification events sent directly to an administrative Telegram chat via Bot API.
-* **Host Outage Detection (Dead Man's Snitch):** To monitor node availability during complete power or upstream connectivity failures, a cron job sends a heartbeat ping to an external endpoint every 5 minutes. If missed, an external alert is generated.
+* **Incident Dispatch:** Critical service failures trigger immediate Telegram alerts via Bot API.
+* **Outage Detection (Dead Man's Snitch):** Cron ping sent to an external Dead Man's Snitch endpoint every 5 minutes. If power or network fails, an external alert fires.
 
-## 8. Maintenance & Automation Scripts
+---
 
-### 1. Lid Switch Ignore Configuration
-```ini
-# /etc/systemd/logind.conf
-[Login]
-HandleLidSwitch=ignore
-HandleLidSwitchDocked=ignore
-```
+## 9. Automated Deployment via Ansible
 
-### 2. DuckDNS Dynamic DNS Sync
+The entire setup from bare-metal Debian 12 to a fully running homelab is automated via Ansible:
+
+### Requirements on Target Machine
 ```bash
-# /etc/cron.d/duckdns (runs every 5 minutes)
-*/5 * * * * root curl -s "https://www.duckdns.org/update?domains=YOUR_DOMAIN&token=YOUR_TOKEN&ip=" >/dev/null 2>&1
-```
-
-### 3. External Heartbeat Ping (Dead Man's Snitch)
-```bash
-# /etc/cron.d/heartbeat (runs every 5 minutes)
-*/5 * * * * root curl -fsS --retry 3 https://nosnch.in/YOUR_TOKEN >/dev/null 2>&1
-```
-
-### 4. Volume Backup Script
-```bash
-# /etc/cron.daily/homelab-backup
-0 4 * * * root /opt/scripts/backup-volumes.sh
-```
-
-## 9. Dashboard: Homepage
-
-A unified, modern, lightweight dashboard deployed via [Homepage](https://gethomepage.dev) connects to the Docker socket to provide real-time status widgets:
-* **System Metrics:** Real-time host CPU, RAM, temperature, uptime, and disk capacity.
-* **Service Integrations:** Visual indicators for Pi-hole, Uptime Kuma, Vaultwarden, Portainer, and Grafana.
-* **Security:** Bound strictly to Tailscale / LAN ingress via Nginx reverse proxy.
-
-## 10. Storage Architecture & Virtual 1TB HDD Emulation
-
-If the physical 1 TB secondary HDD is not yet installed, the infrastructure provisions a **sparse loop device image**:
-* A 1 TB sparse file is created on the primary SSD (`/var/lib/homelab/virtual-hdd.img`).
-* **Zero initial storage consumption:** A sparse file only consumes physical storage when actual container data is written to it.
-* Automatically formatted as `ext4` and mounted to `/mnt/hdd` in `/etc/fstab` with `discard` enabled.
-* **Seamless Hardware Migration:** When the physical 1 TB drive is plugged in later, simply `rsync` contents from `/mnt/hdd/` to the physical partition and update `/etc/fstab`. Zero modifications to `docker-compose.yml` or container volume paths are required!
-
-Provisioning script:
-```bash
-sudo bash scripts/setup-sparse-disk.sh
-```
-
-## 11. Automated Provisioning via Ansible
-
-Complete bare-metal-to-production automation is available in the [`ansible/`](file:///ansible/) directory:
-
-```bash
-# From target Debian 12 machine:
 sudo apt update && sudo apt install -y git ansible
-git clone https://github.com/yeronymus/homelab.git
-cd homelab/ansible
-# Configure passwords, domain, and tokens:
-nano vars.yml
-# Execute playbook:
-sudo ansible-playbook -i inventory.ini playbook.yml
 ```
 
+### Steps:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yeronymus/homelab.git
+   cd homelab/ansible
+   ```
+2. Configure credentials and domains in `vars.yml`:
+   ```bash
+   nano vars.yml
+   ```
+3. Run the playbook:
+   ```bash
+   sudo ansible-playbook -i inventory.ini playbook.yml
+   ```
+4. Authenticate Tailscale:
+   ```bash
+   sudo tailscale up
+   ```
+
+### What Ansible Provisions:
+1. System hardening, base utilities, and logind lid-switch ignore configuration.
+2. TLP battery preservation policy.
+3. Disabling `systemd-resolved` port 53 stub listener (freeing port 53 for Pi-hole).
+4. SSD persistent data directory creation (`/opt/homelab/data/...`).
+5. Official Docker Engine & Docker Compose plugin installation.
+6. Tailscale installation and service activation.
+7. UFW firewall rules (allow 22, 80, 443, and all traffic on `tailscale0`).
+8. Environment file generation, SSL bootstrap, and `docker compose up -d`.
+9. Backup and Dead Man's Snitch cron jobs.
+
+---
+
+## 10. Manual Deployment via Docker Compose
+
+If deploying without Ansible:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/yeronymus/homelab.git /opt/homelab
+cd /opt/homelab
+
+# 2. Configure environment
+cp .env.example .env
+nano .env
+
+# 3. Create persistent directories on SSD
+mkdir -p /opt/homelab/data/{vaultwarden,pihole/etc-pihole,pihole/etc-dnsmasq.d,uptime-kuma,prometheus,grafana,portainer,football-manager}
+mkdir -p /opt/homelab/backups
+chmod 777 /opt/homelab/data/{prometheus,grafana}
+
+# 4. Generate initial self-signed SSL certificate (for Nginx startup)
+bash scripts/generate-self-signed-ssl.sh
+
+# 5. Start Docker stack
+docker compose up -d
+```
+
+---
+
+## 11. Maintenance & Automation Scripts
+
+* **Backup Volumes Script:** [`scripts/backup-volumes.sh`](file:///scripts/backup-volumes.sh) — Daily compressed archive of SQLite databases and data directories with 7-day retention.
+* **DuckDNS Update Script:** [`scripts/duckdns-update.sh`](file:///scripts/duckdns-update.sh) — Dynamic IP synchronization.
+* **Self-Signed SSL Generator:** [`scripts/generate-self-signed-ssl.sh`](file:///scripts/generate-self-signed-ssl.sh) — Bootstraps Nginx before real Let's Encrypt certificates are acquired.

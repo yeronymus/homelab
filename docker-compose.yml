@@ -59,8 +59,8 @@ services:
       - WEBPASSWORD=${PIHOLE_PASSWORD}
       - FTLCONF_LOCAL_IPV4=${TAILSCALE_IP:-127.0.0.1}
     volumes:
-      - ${DATA_DIR:-/mnt/hdd/data}/pihole/etc-pihole:/etc/pihole
-      - ${DATA_DIR:-/mnt/hdd/data}/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+      - ${DATA_DIR:-/opt/homelab/data}/pihole/etc-pihole:/etc/pihole
+      - ${DATA_DIR:-/opt/homelab/data}/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
     networks:
       - homelab-net
     cap_add:
@@ -83,7 +83,7 @@ services:
       - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
       - WEBSOCKET_ENABLED=true
     volumes:
-      - ${DATA_DIR:-/mnt/hdd/data}/vaultwarden:/data
+      - ${DATA_DIR:-/opt/homelab/data}/vaultwarden:/data
     networks:
       - homelab-net
     deploy:
@@ -100,7 +100,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${DATA_DIR:-/mnt/hdd/data}/portainer:/data
+      - ${DATA_DIR:-/opt/homelab/data}/portainer:/data
     networks:
       - homelab-net
     deploy:
@@ -116,7 +116,7 @@ services:
     container_name: uptime-kuma
     restart: unless-stopped
     volumes:
-      - ${DATA_DIR:-/mnt/hdd/data}/uptime-kuma:/app/data
+      - ${DATA_DIR:-/opt/homelab/data}/uptime-kuma:/app/data
     networks:
       - homelab-net
     deploy:
@@ -138,7 +138,7 @@ services:
       - '--web.enable-lifecycle'
     volumes:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ${DATA_DIR:-/mnt/hdd/data}/prometheus:/prometheus
+      - ${DATA_DIR:-/opt/homelab/data}/prometheus:/prometheus
     networks:
       - homelab-net
     deploy:
@@ -179,7 +179,7 @@ services:
       - GF_SERVER_ROOT_URL=https://${DOMAIN_NAME}/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
-      - ${DATA_DIR:-/mnt/hdd/data}/grafana:/var/lib/grafana
+      - ${DATA_DIR:-/opt/homelab/data}/grafana:/var/lib/grafana
     networks:
       - homelab-net
     deploy:
@@ -218,7 +218,7 @@ services:
       - ADMIN_CHAT_ID=${BOT_ADMIN_CHAT_ID}
       - PORT=8080
     volumes:
-      - ${DATA_DIR:-/mnt/hdd/data}/football-manager:/app/data
+      - ${DATA_DIR:-/opt/homelab/data}/football-manager:/app/data
     networks:
       - homelab-net
     deploy:

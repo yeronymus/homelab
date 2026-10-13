@@ -4,8 +4,8 @@
 # ==============================================================================
 set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/mnt/hdd/backups}"
-DATA_DIR="${DATA_DIR:-/mnt/hdd/data}"
+BACKUP_DIR="${BACKUP_DIR:-/opt/homelab/backups}"
+DATA_DIR="${DATA_DIR:-/opt/homelab/data}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_ARCHIVE="${BACKUP_DIR}/homelab_backup_${TIMESTAMP}.tar.gz"
 RETENTION_DAYS=7
