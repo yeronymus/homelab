@@ -42,16 +42,33 @@
     # ==========================================================================
     # 2. Laptop Power Policy & Battery Management
     # ==========================================================================
-    - name: Configure systemd-logind to ignore laptop lid switch
-      ansible.builtin.lineinfile:
-        path: /etc/systemd/logind.conf
-        regexp: "^#?{{ item.key }}="
-        line: "{{ item.key }}={{ item.value }}"
-      loop:
-        - { key: 'HandleLidSwitch', value: 'ignore' }
-        - { key: 'HandleLidSwitchDocked', value: 'ignore' }
-        - { key: 'HandleLidSwitchExternalPower', value: 'ignore' }
+    - name: Ensure logind.conf.d directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/logind.conf.d
+        state: directory
+        mode: '0755'
+
+    - name: Deploy lid switch drop-in configuration
+      ansible.builtin.copy:
+        dest: /etc/systemd/logind.conf.d/lid.conf
+        content: |
+          [Login]
+          HandleLidSwitch=ignore
+          HandleLidSwitchExternalPower=ignore
+          HandleLidSwitchDocked=ignore
+          LidSwitchIgnoreInhibited=no
+        mode: '0644'
       notify: Restart systemd-logind
+
+    - name: Mask systemd sleep and suspend targets (prevent sleep on server)
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: yes
+      loop:
+        - sleep.target
+        - suspend.target
+        - hibernate.target
+        - hybrid-sleep.target
 
     - name: Enable and start TLP service
       ansible.builtin.systemd:
