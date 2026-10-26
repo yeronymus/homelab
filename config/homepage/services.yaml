@@ -23,7 +23,7 @@
 - Observability:
     - Uptime Kuma:
         icon: uptime-kuma.png
-        href: /kuma/
+        href: http://100.112.89.10:3001
         description: Endpoint Health Checks & Alerts
         server: my-docker
         container: uptime-kuma
@@ -37,12 +37,19 @@
 
     - Prometheus:
         icon: prometheus.png
-        href: http://localhost:9090
+        href: http://100.112.89.10:9090
         description: Metric Scraper & Time-Series DB
         server: my-docker
         container: prometheus
 
 - Applications:
+    - Football Manager:
+        icon: telegram.png
+        href: https://t.me/
+        description: Production Telegram Bot & FastAPI API
+        server: my-docker
+        container: football-manager-app
+
     - Tailscale:
         icon: tailscale.png
         href: https://login.tailscale.com/admin/machines
