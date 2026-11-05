@@ -277,10 +277,26 @@
                         <div class="placeholder-sub">
                             Письмо уже доставлено или находится в пути. Скоро здесь появится персональное видеообращение!
                         </div>
+                        <button onclick="playDemo()" style="margin-top:10px; padding:10px 18px; border-radius:12px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.4); color:#c7d2fe; font-size:13px; cursor:pointer; font-weight:500; transition:all 0.2s;">
+                            ▶ Проверить плеер (Демо-режим)
+                        </button>
                     </div>
                 </div>
             `;
         }
+
+        window.playDemo = function() {
+            mediaContainer.innerHTML = `
+                <div class="video-wrapper ratio-16-9">
+                    <iframe 
+                        src="https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?rel=0&modestbranding=1&playsinline=1&autoplay=1" 
+                        title="Demo Video" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                        allowfullscreen>
+                    </iframe>
+                </div>
+            `;
+        };
     </script>
 </body>
 </html>

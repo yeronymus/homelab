@@ -3,7 +3,7 @@ from qrcode.image.svg import SvgPathImage
 import os
 import shutil
 
-URL = "https://football-bot-yeronym.duckdns.org/v/RTWVPnZOermi36mV6m0w6Ln84olQzhcn"
+URL = "https://special-letter.duckdns.org/v/RTWVPnZOermi36mV6m0w6Ln84olQzhcn"
 OUTPUT_DIR = r"c:\Users\yeronym\Documents\projects\homelab\data\letter"
 ARTIFACT_DIR = r"C:\Users\yeronym\.gemini\antigravity\brain\46517457-14a3-4020-9fc8-c5585eadfd60"
 
