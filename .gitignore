@@ -11,7 +11,11 @@ certbot/
 certbot/www/
 
 # Local data volumes
-data/
+data/*
+!data/letter/
+data/letter/media/*.mp4
+data/letter/media/*.mov
+data/letter/media/*.avi
 backups/
 *.tar.gz
 *.img

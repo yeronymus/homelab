@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Карточка с QR-кодом для письма</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #0f172a;
+        }
+
+        .no-print-bar {
+            background: #1e293b;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        /* Printable card */
+        .card {
+            background: #ffffff;
+            width: 320px;
+            padding: 32px 28px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            border: 1px dashed #cbd5e1;
+            text-align: center;
+        }
+
+        .card-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #0f172a;
+        }
+
+        .card-subtitle {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 20px;
+        }
+
+        .qr-frame {
+            background: #ffffff;
+            padding: 12px;
+            border-radius: 12px;
+            border: 2px solid #0f172a;
+            display: inline-block;
+            margin-bottom: 18px;
+        }
+
+        .qr-frame img {
+            display: block;
+            width: 200px;
+            height: 200px;
+        }
+
+        .instructions {
+            font-size: 12px;
+            color: #475569;
+            line-height: 1.6;
+            margin-bottom: 16px;
+            text-align: left;
+            background: #f8fafc;
+            padding: 10px 14px;
+            border-radius: 8px;
+        }
+
+        .fallback-url {
+            font-size: 9px;
+            color: #94a3b8;
+            word-break: break-all;
+            font-family: monospace;
+        }
+
+        @media print {
+            body {
+                background: none;
+                padding: 0;
+            }
+            .no-print-bar {
+                display: none;
+            }
+            .card {
+                box-shadow: none;
+                border: 1px dashed #94a3b8;
+                margin: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="no-print-bar">
+        <span>💡 Откройте этот файл в браузере и нажмите <b>Ctrl + P</b> (или кнопку справа) для печати карточки:</span>
+        <button class="btn" onclick="window.print()">Распечатать карточку</button>
+    </div>
+
+    <div class="card">
+        <div class="card-icon">✉️ 🎥</div>
+        <div class="card-title">Видеописьмо для тебя</div>
+        <div class="card-subtitle">Personal Video Message</div>
+
+        <div class="qr-frame">
+            <img src="qr_code.png" alt="QR Code">
+        </div>
+
+        <div class="instructions">
+            <b>Как посмотреть:</b><br>
+            1. Открой камеру на смартфоне<br>
+            2. Наведи на QR-код<br>
+            3. Нажми на появившуюся ссылку
+        </div>
+
+        <div class="fallback-url">
+            https://football-bot-yeronym.duckdns.org/v/RTWVPnZOermi36mV6m0w6Ln84olQzhcn
+        </div>
+    </div>
+
+</body>
+</html>
